@@ -10,14 +10,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import java.awt.*;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.security.NoSuchAlgorithmException;
-import java.security.spec.InvalidKeySpecException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -72,7 +72,9 @@ public class IronGramController {
             HttpSession session,
             HttpServletResponse response,
             String receiver,
-            MultipartFile photo
+            MultipartFile photo,
+            boolean isPublic,
+            long deleteTime
     ) throws Exception {
         String username = (String) session.getAttribute("username");
         if (username == null) {
@@ -94,6 +96,8 @@ public class IronGramController {
         p.sender = senderUser;
         p.receiver = receiverUser;
         p.filename = photoFile.getName();
+        p.isPublic = isPublic;
+        p.deleteTime = deleteTime;
         photos.save(p);
 
         response.sendRedirect("/");
@@ -110,6 +114,35 @@ public class IronGramController {
 
         User user = users.findOneByUsername(username);
 
+        List<Photo> photoList = photos.findByReceiver(user);
+        for (Photo p : photoList) {
+            if (p.accessDate == null) {
+                p.accessDate = LocalDateTime.now();
+                photos.save(p);
+            }
+            else if (p.accessDate.isBefore(LocalDateTime.now().minusSeconds(p.deleteTime))) {
+                File fileToDelete = new File(String.format("public/%s", p.filename));
+                fileToDelete.delete();
+                photos.delete(p);
+            }
+        }
+
         return photos.findByReceiver(user);
+    }
+
+    @RequestMapping("/public-photos")
+    public List<Photo> publicPhotos(HttpSession session) {
+        String username = (String) session.getAttribute("username");
+        User user = users.findOneByUsername(username);
+        List<Photo> pubPhotos = photos.findBySender(user);
+        ArrayList<Photo> photos2 = new ArrayList<>();
+
+        for (Photo p : pubPhotos) {
+            if (p.isPublic == true) {
+                photos2.add(p);
+            }
+        }
+
+        return photos2;
     }
 }
