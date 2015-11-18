@@ -7,6 +7,7 @@ import com.theironyard.services.UserRepository;
 import com.theironyard.utils.PasswordHash;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -56,6 +57,7 @@ public class IronGramController {
     public void logout(HttpSession session, HttpServletResponse response) throws IOException {
         session.invalidate();
         response.sendRedirect("/");
+        System.out.println("Goodbye");
     }
 
     @RequestMapping("/user")
@@ -74,7 +76,7 @@ public class IronGramController {
             String receiver,
             MultipartFile photo,
             boolean isPublic,
-            long deleteTime
+            @RequestParam(defaultValue = "0") long deleteTime
     ) throws Exception {
         String username = (String) session.getAttribute("username");
         if (username == null) {
@@ -88,7 +90,11 @@ public class IronGramController {
             throw new Exception("Receiver name does not exists.");
         }
 
-        File photoFile = File.createTempFile("photo", ".jpg", new File("public"));
+        if (!photo.getContentType().startsWith("image")) {
+            throw new Exception("Only images are allowed.");
+        }
+
+        File photoFile = File.createTempFile("photo", photo.getOriginalFilename(), new File("public"));
         FileOutputStream fos = new FileOutputStream(photoFile);
         fos.write(photo.getBytes());
 
@@ -97,7 +103,12 @@ public class IronGramController {
         p.receiver = receiverUser;
         p.filename = photoFile.getName();
         p.isPublic = isPublic;
-        p.deleteTime = deleteTime;
+        if (p.deleteTime == 0) {
+            p.deleteTime = 10;
+        }
+        else {
+            p.deleteTime = deleteTime;
+        }
         photos.save(p);
 
         response.sendRedirect("/");
@@ -108,9 +119,6 @@ public class IronGramController {
     @RequestMapping("/photos")
     public List<Photo> showPhotos(HttpSession session) throws Exception {
         String username = (String) session.getAttribute("username");
-        if (username == null) {
-            throw new Exception("Not logged in.");
-        }
 
         User user = users.findOneByUsername(username);
 
@@ -131,8 +139,7 @@ public class IronGramController {
     }
 
     @RequestMapping("/public-photos")
-    public List<Photo> publicPhotos(HttpSession session) {
-        String username = (String) session.getAttribute("username");
+    public List<Photo> publicPhotos(String username) {
         User user = users.findOneByUsername(username);
         List<Photo> pubPhotos = photos.findBySender(user);
         ArrayList<Photo> photos2 = new ArrayList<>();
